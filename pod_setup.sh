@@ -6,6 +6,7 @@ source activate awd-lstm
 echo "--- Installing PyTorch and ML Stack ---"
 # Using 1.12.1 for TITAN RTX / 3090 compatibility
 conda install pytorch==1.12.1 torchvision==0.13.1 torchaudio==0.12.1 cudatoolkit=11.3 -c pytorch -y
+pip install comet_ml debugpy
 
 # 4. Create the MKL/iJIT Stub Fix
 echo "--- Applying Intel MKL Symbol Fix ---"

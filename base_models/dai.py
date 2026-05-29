@@ -9,7 +9,7 @@ from torch.autograd import Variable
 from utils.base_models.dai.embed_regularize import embedded_dropout
 from utils.base_models.dai.weight_drop import WeightDrop
 from utils.models.locked_dropout import LockedDropout
-from utils.models.svd_embed import SvdEmbed
+# from utils.models.svd_embed import SvdEmbed
 
 
 class Dai(nn.Module):
