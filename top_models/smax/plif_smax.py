@@ -80,30 +80,38 @@ class PlifSmax(Smax):
             xname="x"
         )
         
-        # Histogram of logits in intervals
-        if self.sample_batch is not None:
-            sample_logits = self.sample_batch
-            delta = 2. * self.T / self.K
-            bin_ids = torch.clamp(
-                ((sample_logits + self.T) / delta).detach().long(),
-                max=self.K - 1, min=0
-            )            
-            hist_counts = torch.bincount(bin_ids.flatten().cpu(), minlength=self.K)
-            out[f"logits_hist"] = wandb.plot_table(
-            vega_spec_name="ucsd-alon/logit_distribution",
-            data_table=wandb.Table(data=[[j, count.item()] for j, count in enumerate(hist_counts)], columns=["bin", "count"]),
-            fields={
-            "x": "bin",
-            "y": "count",
-            "title": f"Logit Distribution"
-        }
-        )
+        # # Histogram of logits in intervals
+        # if self.sample_batch is not None:
+        #     sample_logits = self.sample_batch
+        #     delta = 2. * self.T / self.K
+        #     bin_ids = torch.clamp(
+        #         ((sample_logits + self.T) / delta).detach().long(),
+        #         max=self.K - 1, min=0
+        #     )            
+        #     hist_counts = torch.bincount(bin_ids.flatten().cpu(), minlength=self.K)
+        #     out[f"logits_hist"] = wandb.plot_table(
+        #     vega_spec_name="ucsd-alon/logit_distribution",
+        #     data_table=wandb.Table(data=[[j, count.item()] for j, count in enumerate(hist_counts)], columns=["bin", "count"]),
+        #     fields={
+        #     "x": "bin",
+        #     "y": "count",
+        #     "title": f"Logit Distribution"
+        # }
+        # )
         # Also plot the histogram of the sample batch itself
         if self.sample_batch is not None:
+            n_samples = 10000
+            flat_logits = self.sample_batch.view(-1)
+            random_indices = torch.randperm(len(flat_logits))[:n_samples]
+            sample_batch = flat_logits[random_indices]
             out[f"sample_batch_hist"] = wandb.plot.histogram(
-                table= wandb.Table(data=self.sample_batch.flatten().cpu().unsqueeze(1).tolist(), columns=["logit"]),
+                table= wandb.Table(data=sample_batch.unsqueeze(1).cpu().tolist(), columns=["logit"]),
                 value='logit',
                 title=f"Sample Batch Distribution"
             )
-        
+            out["logits_max"] = self.sample_batch.max().item()
+            out["logits_min"] = self.sample_batch.min().item()
+            out["logits_mean"] = self.sample_batch.mean().item()
+            out["logits_std"] = self.sample_batch.std().item()
+
         return out
