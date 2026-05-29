@@ -6,8 +6,7 @@ import sys
 import time
 
 # third party packages
-from comet_ml import Experiment
-import wandb
+import wandb  # Replaced comet_ml with wandb
 
 import numpy as np
 import torch
@@ -45,10 +44,6 @@ def get_experiment_objects():
         debugpy.listen(port)
         debugpy.wait_for_client()  # Pauses this specific worker until you attach VS Code
         print(f"Debugger attached!")
-    comet = Experiment(api_key="<your_key>", project_name="<your_project>", 
-                        workspace="<your_workspace>", log_code=False, 
-                        auto_param_logging=False, auto_metric_logging=False, 
-                        disabled=args.no_comet, display_summary=False)
 
     if not args.continue_train:
         # else args.save is the directory from which assets are loaded to 
@@ -59,15 +54,15 @@ def get_experiment_objects():
     # Initialize wandb
     run_name = args.save.split('/')[-1]
     wandb.init(
-        project="awd-lstm-plif-ptb", 
-        entity="ucsd-alon",  # Optional: change if using a wandb team workspace
+        project="<your_project>", 
+        entity="<your_workspace>",  # Optional: change if using a wandb team workspace
+        mode="disabled" if args.no_comet else "online", # Adapting the old disable flag
         name=run_name,
         config=vars(args) # Automatically logs all parser arguments as hyper-parameters
     )
 
-    comet.set_name(args.save.split('/')[-1])
-    comet.log_parameters(vars(args))
-    copy_assets(args, comet)
+    # Note: copy_assets(args, comet) was omitted or would need manual porting 
+    # if it relies heavily on specific comet artifact APIs.
 
     last_state = None
     if args.continue_train:
@@ -76,7 +71,7 @@ def get_experiment_objects():
     else:
         init_random(args.seed, args.cuda)
 
-    return args, comet, last_state
+    return args, last_state
 
 
 def get_data_objects(args):
@@ -155,7 +150,7 @@ def train(epoch, args, model, criterion, optimizer,
     with torch.autograd.set_detect_anomaly(args.detect_anomaly):
         if args.rnn_type == 'QRNN':
             model.base_model.reset()
-        # Turn on training mode which enables dropout.
+        # Turn on training mode which disables dropout.
         total_raw_loss = 0
         total_cri_loss = 0
         total_loss = 0 # includes loss from regularization terms
@@ -173,10 +168,6 @@ def train(epoch, args, model, criterion, optimizer,
         hidden = [ model.base_model.init_hidden(args.small_batch_size) 
                     for _ in range(args.batch_size // args.small_batch_size) ]
         batch, i = 0, 0
-        # train_data.size: 
-        #   [77465, 12] for PTB with batchsize of 12
-        #   [26107, 80] for WK2 with batchsize of 80
-        #   [139241, 15] for WK2 with batchsize of 15
         while i < train_data.size(0) - 1 - 1:
             bptt = args.bptt if np.random.random() < 0.95 else args.bptt / 2.
             # Prevent excessively small or negative sequence lengths
@@ -198,12 +189,7 @@ def train(epoch, args, model, criterion, optimizer,
                 cur_data, cur_targets = data[:, start: end], \
                                     targets[:, start: end].contiguous().view(-1)
 
-                # Starting each batch, we detach the hidden state from how it 
-                # was previously produced.
-                # If we didn't, the model would try backpropagating all the way 
-                # to start of the dataset.
                 hidden[s_id] = repackage_hidden(hidden[s_id])
-                # ensure output is 2D
                 output, hidden[s_id],\
                     rnn_hs, dropped_rnn_hs = parse_model_result(
                         model(**get_model_args(
@@ -234,20 +220,13 @@ def train(epoch, args, model, criterion, optimizer,
                 start = end
                 end = start + args.small_batch_size
     
-
                 gc.collect()
-
 
                 if args.local_debug:
                     break
             
-            # `clip_grad_norm` helps prevent the exploding gradient problem in 
-            # RNNs / LSTMs.
             torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip)
-            #inspect_grad(model.named_parameters())
             optimizer.step()
-
-            # total_raw_loss += raw_loss.data
 
             for param_group in optimizer.param_groups:
                 param_group['lr'] = param_group['prev_lr']
@@ -262,11 +241,7 @@ def train(epoch, args, model, criterion, optimizer,
             elif i >= train_data.size(0):
                 log_now = True
                 num_batches = batch % args.log_interval
-            """
-            every time seq len is different and not exactly args.bptt
-            so len(train_data) // args.bptt to count the number of batches 
-            is not correct
-            """
+
             if log_now:
                 cur_raw_loss = total_raw_loss.item() / num_batches
                 cur_cri_loss = total_cri_loss.item() / num_batches
@@ -286,16 +261,15 @@ def train(epoch, args, model, criterion, optimizer,
                         exp(cur_raw_loss), cur_cri_loss, cur_loss
                     )
                 )
+                
+                # Optional step-level logging to track training dynamics inside the epoch
                 wandb.log({
-                    "epoch": epoch,
-                    "batch": batch,
-                    "lr": args.lr,
-                    "ms/batch": elapsed * 1000 / num_batches,
-                    "raw loss": cur_raw_loss,
-                    "raw ppl": exp(cur_raw_loss),
-                    "cri. loss": cur_cri_loss,
-                    "tot. loss": cur_loss
+                    "batch/raw_loss": cur_raw_loss,
+                    "batch/raw_ppl": exp(cur_raw_loss),
+                    "batch/cri_loss": cur_cri_loss,
+                    "batch/total_loss": cur_loss
                 })
+
                 total_raw_loss = 0
                 total_cri_loss = 0
                 total_loss = 0
@@ -305,10 +279,9 @@ def train(epoch, args, model, criterion, optimizer,
                 logged_counter = 1
                 break
        
-        
         return (epoch_raw_loss/logged_counter, epoch_loss/logged_counter)
 
-def learn(args, comet, killer, model, criterion, optimizer, train_data, 
+def learn(args, killer, model, criterion, optimizer, train_data, 
             val_data, top_metrics, lgr):
     best_val_loss = []
     stored_loss = 100000000
@@ -386,19 +359,16 @@ def learn(args, comet, killer, model, criterion, optimizer, train_data,
             best_val_loss.append(val_loss)
 
         top_metrics.push('val', epoch)
-        comet.log_metrics(
+        
+        # Replaced comet.log_metrics with wandb.log
+        wandb.log(
             {
+                'epoch': epoch,
                 'train_ppl': exp(avg_loss[0]),
-                'valid_ppl': exp(val_loss)
-            },
-            step=epoch
+                'valid_ppl': exp(val_loss),
+                'valid_loss': val_loss
+            }
         )
-        wandb.log({
-            "epoch": epoch,
-            "train_ppl": exp(avg_loss[0]),
-            "valid_ppl": exp(val_loss),
-            "valid_loss": val_loss
-        })
 
         lgr.log('-' * 89)
         lgr.log(
@@ -414,16 +384,7 @@ def learn(args, comet, killer, model, criterion, optimizer, train_data,
             )
         )
         lgr.log('-' * 89)
-        wandb.log({
-            "epoch": epoch,
-            "train_time": (train_end_time - epoch_start_time),
-            "total_time": (time.time() - epoch_start_time),
-            "avg_train_raw_loss": avg_loss[0],
-            "avg_train_raw_ppl": exp(avg_loss[0]),
-            "avg_train_tot_loss": avg_loss[1],
-            "valid_loss": val_loss,
-            "valid_ppl": exp(val_loss)
-        })
+        
 
         if args.local_debug:
             print("epoch %s in debug mode done!" % (epoch))
@@ -435,15 +396,15 @@ def learn(args, comet, killer, model, criterion, optimizer, train_data,
     
     killer.notify_completion()
 
-def test(args, comet, model, test_data, top_metrics, lgr, recent_model=False):
+def test(args, model, test_data, top_metrics, lgr, recent_model=False):
     # Run on test data.
     test_loss = evaluate(model, test_data, args.test_batch_size)
     if not recent_model:
         log_msg = 'End of training'
-        comet_metric = 'test_ppl'
+        wandb_metric = 'test_ppl'
     else:
         log_msg = 'Recent model on test set'
-        comet_metric = 'recent_model_test_ppl'
+        wandb_metric = 'recent_model_test_ppl'
     top_metrics.push('test', 0)
     lgr.log('=' * 89)
     lgr.log(
@@ -453,15 +414,11 @@ def test(args, comet, model, test_data, top_metrics, lgr, recent_model=False):
         )
     )
     lgr.log('=' * 89)
-    comet.log_metric(comet_metric, exp(test_loss))
-    wandb.log({
-        "test_loss": test_loss,
-        "test_ppl": exp(test_loss)
-    })
+    
+    # Replaced comet.log_metric with wandb.log
+    wandb.log({wandb_metric: exp(test_loss)})
 
-def analysis(args, comet, model, val_data, test_data, lgr, recent_model=False):
-    # Post training analysis
-    # Calculate ranks
+def analysis(args, model, val_data, test_data, lgr, recent_model=False):
     if not args.local_debug and not args.no_analysis:
         lgr.log('=' * 89)
         if not recent_model:
@@ -469,12 +426,8 @@ def analysis(args, comet, model, val_data, test_data, lgr, recent_model=False):
         else:
             lgr.log('For the recent model,')
         if 'penn' in args.data:
-            # rank on validation only for PTB
-            # due to OOM issues and time consumption, restricting only to 
-            # test set for wk2
-            
             val_ranks = calc_rank(
-                model, val_data, args.eval_batch_size, args, 'val', comet
+                model, val_data, args.eval_batch_size, args, 'val', None # Comet object dropped
             )
             lgr.log(
                 "| {} | Rank analysis on val data | {} "
@@ -482,12 +435,11 @@ def analysis(args, comet, model, val_data, test_data, lgr, recent_model=False):
                     time.strftime("%Y%m%d-%H%M%S"), str(val_ranks)
                 )
             )
-                # Prefixing metrics manually for wandb
+            # Prefixing metrics manually for wandb
             wandb.log({f"val/{k}": v for k, v in val_ranks.items()})
-            comet.log_metrics(val_ranks, prefix='val')
 
         test_ranks = calc_rank(
-            model, test_data, args.test_batch_size, args, 'test', comet
+            model, test_data, args.test_batch_size, args, 'test', None # Comet object dropped
         )
         lgr.log(
             "| {} | Rank analysis on test data | {} "
@@ -496,37 +448,41 @@ def analysis(args, comet, model, val_data, test_data, lgr, recent_model=False):
             )
         )
         wandb.log({f"test/{k}": v for k, v in test_ranks.items()})
-        comet.log_metrics(test_ranks, prefix='test')
         lgr.log("| {} | End of analysis ".format(time.strftime("%Y%m%d-%H%M%S")))
         lgr.log('=' * 89)
 
 
 if __name__ == '__main__':
     print('experiment started.')
-    args, comet, last_state = get_experiment_objects()
+    args, last_state = get_experiment_objects()
     lgr = Logger(args.save)
-    top_metrics = TopMetrics(comet)
+    
+    # Note: If TopMetrics internally relies heavily on Comet APIs, 
+    # you might need to adjust or rewrite that utility file.
+    top_metrics = TopMetrics(None) 
+    
     train_data, val_data, test_data, args.ntoken = get_data_objects(args)
     model, criterion, optimizer = get_learning_objects(args, last_state, lgr)
     
-    
     killer = GracefulKiller()
     while not killer.kill_now:
-        learn(args, comet, killer, model, criterion, optimizer, train_data, 
+        learn(args, killer, model, criterion, optimizer, train_data, 
                 val_data, top_metrics, lgr)
 
     # Load the best saved model.
     model.load_state_dict(torch.load(os.path.join(args.save, 'model.pt')))
     model = parallelize_module(model, args)
 
-    test(args, comet, model, test_data, top_metrics, lgr)
-    analysis(args, comet, model, val_data, test_data, lgr)
+    test(args, model, test_data, top_metrics, lgr)
+    analysis(args, model, val_data, test_data, lgr)
     if args.recent_model_analysis:
         model.load_state_dict(
             torch.load(os.path.join(args.save, 'model_recent.pt'))
         )
         model = parallelize_module(model, args)
-        test(args, comet, model, test_data, top_metrics, lgr, recent_model=True)
-        analysis(args, comet, model, val_data, test_data, lgr, recent_model=True)
+        test(args, model, test_data, top_metrics, lgr, recent_model=True)
+        analysis(args, model, val_data, test_data, lgr, recent_model=True)
+
+    # Make sure to finish the wandb run cleanly at the end
     wandb.finish()
     print('experiment done.')

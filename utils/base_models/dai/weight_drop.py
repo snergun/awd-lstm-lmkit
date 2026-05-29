@@ -32,7 +32,6 @@ class WeightDrop(torch.nn.Module):
     def _setweights(self):
         for name_w in self.weights:
             raw_w = getattr(self.module, name_w + '_raw')
-            w = None
             if self.variational:
                 mask = torch.autograd.Variable(torch.ones(raw_w.size(0), 1))
                 if raw_w.is_cuda: mask = mask.cuda()
@@ -40,7 +39,20 @@ class WeightDrop(torch.nn.Module):
                 w = mask.expand_as(raw_w) * raw_w
             else:
                 w = torch.nn.functional.dropout(raw_w, p=self.dropout, training=self.training)
-            setattr(self.module, name_w, w)
+            setattr(self.module, name_w, Parameter(w))
+
+        # Manually rebuild _flat_weights from scratch using standard LSTM param names
+        if isinstance(self.module, torch.nn.LSTM):
+            num_layers = self.module.num_layers
+            num_directions = 2 if self.module.bidirectional else 1
+            flat = []
+            for layer in range(num_layers):
+                for direction in range(num_directions):
+                    suffix = '_reverse' if direction == 1 else ''
+                    for param in ['weight_ih_l', 'weight_hh_l', 'bias_ih_l', 'bias_hh_l']:
+                        pname = f'{param}{layer}{suffix}'
+                        flat.append(getattr(self.module, pname, None))
+            self.module._flat_weights = flat
 
     def forward(self, *args):
         self._setweights()

@@ -48,3 +48,5 @@ class PlifSmax(Smax):
 
     def forward(self, input, extras):
         return super(PlifSmax, self).forward(input, extras)
+    
+    def get_logs()
