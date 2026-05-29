@@ -34,6 +34,16 @@ from utils.loss_criterion import LossCriterion
 
 def get_experiment_objects():
     args = CLIParser().parse_args()
+    if args.debug:
+        import debugpy
+
+        # Ensure only specific ranks pause, or let all of them pause on unique ports
+        port = 5678 
+
+        print(f"Waiting for debugger attachment on port {port}...")
+        debugpy.listen(port)
+        debugpy.wait_for_client()  # Pauses this specific worker until you attach VS Code
+        print(f"Debugger attached!")
     comet = Experiment(api_key="<your_key>", project_name="<your_project>", 
                         workspace="<your_workspace>", log_code=False, 
                         auto_param_logging=False, auto_metric_logging=False, 
