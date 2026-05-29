@@ -157,8 +157,7 @@ class Dai(nn.Module):
                     weight.new(1, bsz, nhid).zero_()
                 )
         return hidden
-            
-       
+    
 if __name__ == '__main__':
     model = Dai('LSTM', 10, 12, 12, 12, 2)
     input = Variable(torch.LongTensor(13, 9).random_(0, 10))

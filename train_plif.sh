@@ -5,7 +5,7 @@ python main.py \
     --single_gpu \
     --no_comet \
     --debug \
-    --log-interval 100 \
+    --log-interval 10 \
     --lr 20 \
     --bptt 20 \
     --seed 141 \
@@ -15,4 +15,5 @@ python main.py \
     --nhid 1150 \
     --switch_epoch 200 \
     --no_analysis \
+    --debug 
 

@@ -30,6 +30,15 @@ class Model(nn.Module):
                 bm_result['output'], patch_extras(extras, self.base_model)
             )
         return patch_result(bm_result, tm_result, extras)
+    
+    def get_logs(self):
+        """Return dictionary of scalar and line plots for visualization (e.g., WandB)."""
+        out = {}
+        if hasattr(self.base_model, 'get_logs'):
+            out.update(self.base_model.get_logs())
+        if hasattr(self.top_model, 'get_logs'):
+            out.update(self.top_model.get_logs())
+        return out
 
 
 

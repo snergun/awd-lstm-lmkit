@@ -2,6 +2,7 @@ import math
 
 import torch
 import torch.nn as nn
+import wandb
 
 from top_models.smax.smax import Smax
 
@@ -29,7 +30,9 @@ class PlifSmax(Smax):
 
     # logits : size = num_ctxts * bs * num_vocab_words ,
     # i.e. <h,w> dot products
-    def func(self, logits):
+    def func(self, logits, plotting=False):
+        if not plotting:
+            self.sample_batch = logits.detach()  # Store a sample batch for visualization
         size = logits.size()
         logits = logits.view(-1)
         delta = 2. * self.T / self.K
@@ -49,4 +52,65 @@ class PlifSmax(Smax):
     def forward(self, input, extras):
         return super(PlifSmax, self).forward(input, extras)
     
-    def get_logs()
+    def get_logs(self):
+        """Return dictionary of scalar and line plots for visualization (e.g., WandB)."""
+        out = {}
+        xmax = self.T
+        xmin = -xmax
+        if self.sample_batch is not None:
+            batch_min = self.sample_batch.min().item()
+            batch_max = self.sample_batch.max().item()
+            xmin = min(xmin, batch_min - 5)
+            xmax = max(xmax, batch_max + 5)
+                
+        # --- Generate function plot ---
+        xs = torch.linspace(xmin, xmax, 500).to(self.plif_w.device)
+        thresholds_out = None
+        y = self.forward(xs.unsqueeze(0), plotting=True) 
+        y = y.squeeze()
+
+        # --- Line plot ---
+        xs_list = xs.squeeze().cpu().tolist()
+        y_list = y.squeeze().cpu().tolist()
+        out[f"plif_plot"] = wandb.plot.line_series(
+            xs=xs_list,
+            ys=[y_list],
+            keys=["f(x)"],
+            title=f"PLIF Plot",
+            xname="x"
+        )
+        all_pos_w = nn.Softplus()(self.plif_w)
+        out["plif_slopes"] = wandb.plot.line_series(
+            xs=list(range(self.K)),
+            ys=[all_pos_w.squeeze().cpu().tolist()],
+            keys=["slopes"],
+            title=f"PLIF Slopes",
+            xname="x"
+        )
+        
+        # Histogram of logits in intervals
+        if self.sample_batch is not None:
+            sample_logits = self.sample_batch
+            delta = 2. * self.T / self.K
+            bin_ids = torch.clamp(
+                ((sample_logits + self.T) / delta).detach().long(),
+                max=self.K - 1, min=0
+            )            
+            hist_counts = torch.bincount(bin_ids.flatten().cpu(), minlength=self.K)
+            out[f"logits_hist"] = wandb.plot_table(
+            vega_spec_name="ucsd-alon/logit_distribution",
+            data_table=wandb.Table(data=[[j, count.item()] for j, count in enumerate(hist_counts)], columns=["bin", "count"]),
+            fields={
+            "x": "bin",
+            "y": "count",
+            "title": f"Logit Distribution"
+        }
+        )
+        # Also plot the histogram of the sample batch itself
+        if self.sample_batch is not None:
+            out[f"sample_batch_hist"] = wandb.plot.histogram(
+                self.sample_batch.cpu().numpy(),
+                title=f"Sample Batch Distribution"
+            )
+        
+        return out
