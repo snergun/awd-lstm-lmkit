@@ -66,7 +66,7 @@ class PlifSmax(Smax):
         # --- Generate function plot ---
         xs = torch.linspace(xmin, xmax, 500).to(self.plif_w.device)
         thresholds_out = None
-        y = self.forward(xs.unsqueeze(0), plotting=True) 
+        y = self.func(xs.unsqueeze(0), plotting=True) 
         y = y.squeeze()
 
         # --- Line plot ---
@@ -77,14 +77,6 @@ class PlifSmax(Smax):
             ys=[y_list],
             keys=["f(x)"],
             title=f"PLIF Plot",
-            xname="x"
-        )
-        all_pos_w = nn.Softplus()(self.plif_w)
-        out["plif_slopes"] = wandb.plot.line_series(
-            xs=list(range(self.K)),
-            ys=[all_pos_w.squeeze().cpu().tolist()],
-            keys=["slopes"],
-            title=f"PLIF Slopes",
             xname="x"
         )
         
@@ -109,7 +101,8 @@ class PlifSmax(Smax):
         # Also plot the histogram of the sample batch itself
         if self.sample_batch is not None:
             out[f"sample_batch_hist"] = wandb.plot.histogram(
-                self.sample_batch.cpu().numpy(),
+                table= wandb.Table(data=self.sample_batch.flatten().cpu().unsqueeze(1).tolist(), columns=["logit"]),
+                value='logit',
                 title=f"Sample Batch Distribution"
             )
         

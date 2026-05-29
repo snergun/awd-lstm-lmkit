@@ -294,7 +294,8 @@ def train(epoch, args, model, criterion, optimizer,
                     "raw loss": cur_raw_loss,
                     "raw ppl": exp(cur_raw_loss),
                     "cri. loss": cur_cri_loss,
-                    "tot. loss": cur_loss
+                    "tot. loss": cur_loss,
+                    **model.get_logs()
                 })
                 total_raw_loss = 0
                 total_cri_loss = 0
@@ -397,7 +398,8 @@ def learn(args, comet, killer, model, criterion, optimizer, train_data,
             "epoch": epoch,
             "train_ppl": exp(avg_loss[0]),
             "valid_ppl": exp(val_loss),
-            "valid_loss": val_loss
+            "valid_loss": val_loss,
+            **model.get_logs()
         })
 
         lgr.log('-' * 89)
