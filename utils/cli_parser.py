@@ -4,14 +4,14 @@ import sys
 from base_models.args.dai import add_dai_args
 from utils.shared import pkg_map
 from top_models.adv_smax.args.adv_smax import add_adv_smax_args
-from top_models.sc_smax.args.sc_smax import add_sc_smax_args
+# from top_models.sc_smax.args.sc_smax import add_sc_smax_args
 from top_models.smax.args.gs_smax import add_gs_smax_args
 from top_models.smax.args.plif_smax import add_plif_smax_args
 from top_models.smax.args.shift_smax import add_shift_smax_args
 from top_models.mos.args.mos import add_mos_args
-from top_models.xmoc.args.xmoc import add_xmoc_args
-from top_models.xmos.args.xmos import add_xmos_args
-from top_models.mt.args.mt import add_mt_args
+# from top_models.xmoc.args.xmoc import add_xmoc_args
+# from top_models.xmos.args.xmos import add_xmos_args
+# from top_models.mt.args.mt import add_mt_args
 
 
 class CLIParser():
@@ -28,6 +28,7 @@ class CLIParser():
                                  help='random seed')
         self.parser.add_argument('--base_model', type=str, default='dai')
         self.parser.add_argument('--top_model', type=str, default='smax')
+        self.parser.add_argument('--debug', action='store_true')
 
     def add_data_args(self):
         self.parser.add_argument('--batch_size', type=int, default=20,
@@ -112,12 +113,12 @@ class CLIParser():
         add_gs_smax_args(self.parser)
         add_plif_smax_args(self.parser)
         add_adv_smax_args(self.parser)
-        add_sc_smax_args(self.parser)
+        # add_sc_smax_args(self.parser)
         add_shift_smax_args(self.parser)
         add_mos_args(self.parser)
-        add_xmoc_args(self.parser)
-        add_xmos_args(self.parser)
-        add_mt_args(self.parser)
+        # add_xmoc_args(self.parser)
+        # add_xmos_args(self.parser)
+        # add_mt_args(self.parser)
         self.parser.add_argument('--ctx_noise_scale', type=float, default=0.15,
                                     help='gaussian noise scaling factor')
 
