@@ -42,10 +42,7 @@ class PlifSmax(Smax):
         pos_w = torch.gather(all_pos_w, -1, indices)
         # use gather, not take
         pos_w_cumsum = torch.gather(all_pos_cumsum, -1, indices)
-        knots = (-self.T + delta * indices.float())
-        knots = torch.tensor(
-            knots, dtype=knots.dtype, device=logits.device
-        )
+        knots = (-self.T + delta * indices.float()).to(logits.device)
         result = (logits - knots) * pos_w + delta * pos_w_cumsum
         return result.view(size)
 
