@@ -14,5 +14,4 @@ python main.py \
     --nhid 1150 \
     --switch_epoch 200 \
     --no_analysis \
-    --clip 0.0 \
 

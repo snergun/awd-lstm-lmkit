@@ -286,17 +286,6 @@ def train(epoch, args, model, criterion, optimizer,
                         exp(cur_raw_loss), cur_cri_loss, cur_loss
                     )
                 )
-                wandb.log({
-                    "epoch": epoch,
-                    "batch": batch,
-                    "lr": args.lr,
-                    "ms/batch": elapsed * 1000 / num_batches,
-                    "raw loss": cur_raw_loss,
-                    "raw ppl": exp(cur_raw_loss),
-                    "cri. loss": cur_cri_loss,
-                    "tot. loss": cur_loss,
-                    **model.get_logs()
-                })
                 total_raw_loss = 0
                 total_cri_loss = 0
                 total_loss = 0
@@ -396,11 +385,15 @@ def learn(args, comet, killer, model, criterion, optimizer, train_data,
         )
         wandb.log({
             "epoch": epoch,
+            "train_loss": avg_loss[0],
             "train_ppl": exp(avg_loss[0]),
             "valid_ppl": exp(val_loss),
             "valid_loss": val_loss,
-            **model.get_logs()
-        })
+            "train_time": (train_end_time - epoch_start_time),
+            "total_time": (time.time() - epoch_start_time),
+            **model.get_logs(),
+        },
+        step=epoch)
 
         lgr.log('-' * 89)
         lgr.log(
@@ -416,16 +409,6 @@ def learn(args, comet, killer, model, criterion, optimizer, train_data,
             )
         )
         lgr.log('-' * 89)
-        wandb.log({
-            "epoch": epoch,
-            "train_time": (train_end_time - epoch_start_time),
-            "total_time": (time.time() - epoch_start_time),
-            "avg_train_raw_loss": avg_loss[0],
-            "avg_train_raw_ppl": exp(avg_loss[0]),
-            "avg_train_tot_loss": avg_loss[1],
-            "valid_loss": val_loss,
-            "valid_ppl": exp(val_loss)
-        })
 
         if args.local_debug:
             print("epoch %s in debug mode done!" % (epoch))
@@ -485,7 +468,6 @@ def analysis(args, comet, model, val_data, test_data, lgr, recent_model=False):
                 )
             )
                 # Prefixing metrics manually for wandb
-            wandb.log({f"val/{k}": v for k, v in val_ranks.items()})
             comet.log_metrics(val_ranks, prefix='val')
 
         test_ranks = calc_rank(
@@ -497,7 +479,6 @@ def analysis(args, comet, model, val_data, test_data, lgr, recent_model=False):
                 time.strftime("%Y%m%d-%H%M%S"), str(test_ranks)
             )
         )
-        wandb.log({f"test/{k}": v for k, v in test_ranks.items()})
         comet.log_metrics(test_ranks, prefix='test')
         lgr.log("| {} | End of analysis ".format(time.strftime("%Y%m%d-%H%M%S")))
         lgr.log('=' * 89)

@@ -106,6 +106,8 @@ class Dai(nn.Module):
         """
         input: (num_batches, batch_size, -1)
         """
+        for rnn in self.rnns:
+            rnn.flatten_parameters()
         batch_size = input.size(1)
         hidden = extras['hidden']
         emb = self.get_embedding(input, extras)
